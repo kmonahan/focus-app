@@ -1,0 +1,28 @@
+.login {
+  background-color: palegreen;
+  border-radius: 0.4em;
+  color: black;
+  display: inline-block;
+  font-size: 1.5em;
+  padding: 0.5em;
+  text-decoration: none;
+}
+
+.login:visited {
+  color: black;
+}
+
+.login:hover,
+.login:focus {
+  background-color: seagreen;
+}
+
+.login:focus {
+  outline-color: seagreen;
+  outline-offset: 3px;
+  outline-width: 4px;
+}
+
+.disclaimer {
+  font-size: 0.8em;
+}

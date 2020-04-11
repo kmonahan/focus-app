@@ -1,8 +1,12 @@
 /* globals Spotify */
 import React, { useState, useEffect, useCallback } from 'react';
 import './App.css';
+import Login from './components/Login/Login';
 
 function App() {
+  // Constants
+  const DEFAULT_TIME = 1500;
+
   // State Hooks
   const [accessToken, setAccessToken] = useState(null);
   const [userData, setUserData] = useState(null);
@@ -11,7 +15,7 @@ function App() {
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [player, setPlayer] = useState(null);
   const [tracks, setTracks] = useState([]);
-  const [timeRemaining, setTimeRemaining] = useState(60);
+  const [timeRemaining, setTimeRemaining] = useState(DEFAULT_TIME);
 
   // Callback Hooks
   const _api = useCallback(async (endpoint) => {
@@ -58,7 +62,7 @@ function App() {
   const pauseMusic = useCallback(async () => {
     await Promise.all([player.pause(), setIsPlaying(false)]);
     if (timeRemaining <= 0) {
-      setTimeRemaining(60);
+      setTimeRemaining(DEFAULT_TIME);
     }
   }, [player, timeRemaining]);
 
@@ -164,20 +168,14 @@ function App() {
 
   // TODO: Handle case where user is not premium.
   // TODO: Switch to server-side authentication.
+  let appContent;
   if (userData === null) {
-    return (
-      <div className="App">
-          <a className="Login"
-             href="https://accounts.spotify.com/authorize?client_id=637350d3910a4c31a0f06caa6c31366a&redirect_uri=http%3A%2F%2Flocalhost%3A3000&scope=streaming%20user-read-email%20user-read-private%20user-modify-playback-state&response_type=token&state=12345">
-            Get Started
-          </a>
-      </div>
-    );
+    appContent = <Login/>;
   } else {
     const countdown = new Date(timeRemaining * 1000).toISOString().substr(11, 8);
-    return (
-      <div className="App">
-        <h1>Welcome, {userData.display_name}!</h1>
+    appContent = (
+      <div>
+        <h2>Welcome, {userData.display_name}!</h2>
         {selectedPlaylist && player && (
           <div>
             <h2>{selectedPlaylist.name}</h2>
@@ -188,6 +186,12 @@ function App() {
       </div>
     );
   }
+  return (
+    <div className="App">
+      <h1>Focus</h1>
+      {appContent}
+    </div>
+  );
 }
 
 export default App;
