@@ -10,6 +10,7 @@ function App() {
   const [playlists, setPlaylists] = useState([]);
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [player, setPlayer] = useState(null);
+  const [tracks, setTracks] = useState([]);
 
   // Callback Hooks
   const _api = useCallback(async (endpoint) => {
@@ -91,27 +92,40 @@ function App() {
     }
   }, [accessToken]);
 
-  async function play({spotify_uri, id}) {
-    return fetch(`https://api.spotify.com/v1/me/player/play?device_id=${id}`, {
+  // Gather up the next set of tracks to play.
+  useEffect(() => {
+    if (selectedPlaylist) {
+      const tracks = selectedPlaylist.tracks.items.map(item => item.track.uri);
+      setTracks(tracks);
+    }
+  }, [selectedPlaylist]);
+
+  async function play({id, tracksToPlay = []}) {
+    const params = {
       method: 'PUT',
-      body: JSON.stringify({uris: [spotify_uri]}),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`
       },
-    });
+    };
+    if (tracksToPlay) {
+      params.body = JSON.stringify({uris: tracksToPlay});
+    }
+    return fetch(`https://api.spotify.com/v1/me/player/play?device_id=${id}`, params);
   }
 
-  // TODO: Play the actual selected playlist
   // TODO: Play all tracks in the playlist
   async function playMusic() {
     const currentState = await player.getCurrentState();
     if (currentState && currentState.paused) {
       await player.resume();
+    } else if (currentState && currentState.track_window && currentState.track_window.current_track) {
+      await play({id: player._options.id});
     } else {
+      // Start music if there's not.
       await play({
         id: player._options.id,
-        spotify_uri: selectedPlaylist.tracks.items[0].track.uri,
+        tracksToPlay: tracks,
       });
     }
     setIsPlaying(true);
@@ -134,7 +148,7 @@ function App() {
     return (
       <div className="App">
           <a className="Login"
-             href="https://accounts.spotify.com/authorize?client_id=637350d3910a4c31a0f06caa6c31366a&redirect_uri=http%3A%2F%2Flocalhost%3A3000&scope=streaming%20user-read-email%20user-read-private&response_type=token&state=12345">
+             href="https://accounts.spotify.com/authorize?client_id=637350d3910a4c31a0f06caa6c31366a&redirect_uri=http%3A%2F%2Flocalhost%3A3000&scope=streaming%20user-read-email%20user-read-private%20user-modify-playback-state&response_type=token&state=12345">
             Get Started
           </a>
       </div>
