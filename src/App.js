@@ -11,6 +11,7 @@ function App() {
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [player, setPlayer] = useState(null);
   const [tracks, setTracks] = useState([]);
+  const [timeRemaining, setTimeRemaining] = useState(60);
 
   // Callback Hooks
   const _api = useCallback(async (endpoint) => {
@@ -22,8 +23,55 @@ function App() {
     return response.json();
   }, [accessToken]);
 
+  async function play({id, tracksToPlay = []}) {
+    const params = {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+      },
+    };
+    if (tracksToPlay) {
+      params.body = JSON.stringify({uris: tracksToPlay});
+    }
+    return fetch(`https://api.spotify.com/v1/me/player/play?device_id=${id}`, params);
+  }
+
+  // TODO: Play next page of tracks when first is finished.
+  // TODO: Randomly choose another playlist after first finishes.
+  // TODO: Update timer if user pauses music via another device.
+  async function playMusic() {
+    const currentState = await player.getCurrentState();
+    if (currentState && currentState.paused) {
+      await player.resume();
+    } else if (currentState && currentState.track_window && currentState.track_window.current_track) {
+      await play({id: player._options.id});
+    } else {
+      await play({
+        id: player._options.id,
+        tracksToPlay: tracks,
+      });
+    }
+    setIsPlaying(true);
+  }
+
+  const pauseMusic = useCallback(async () => {
+    await Promise.all([player.pause(), setIsPlaying(false)]);
+    if (timeRemaining <= 0) {
+      setTimeRemaining(60);
+    }
+  }, [player, timeRemaining]);
+
+  function togglePlayback() {
+    if (isPlaying) {
+      pauseMusic();
+    } else {
+      playMusic();
+    }
+  }
   // Effect Hooks
   // Set access token if returned from Spotify.
+  // TODO: Handle case when access token expires.
   useEffect(() => {
     const hash = window.location.hash;
     if (hash) {
@@ -100,50 +148,22 @@ function App() {
     }
   }, [selectedPlaylist]);
 
-  async function play({id, tracksToPlay = []}) {
-    const params = {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`
-      },
-    };
-    if (tracksToPlay) {
-      params.body = JSON.stringify({uris: tracksToPlay});
-    }
-    return fetch(`https://api.spotify.com/v1/me/player/play?device_id=${id}`, params);
-  }
-
-  // TODO: Play all tracks in the playlist
-  async function playMusic() {
-    const currentState = await player.getCurrentState();
-    if (currentState && currentState.paused) {
-      await player.resume();
-    } else if (currentState && currentState.track_window && currentState.track_window.current_track) {
-      await play({id: player._options.id});
-    } else {
-      // Start music if there's not.
-      await play({
-        id: player._options.id,
-        tracksToPlay: tracks,
-      });
-    }
-    setIsPlaying(true);
-  }
-
-  async function pauseMusic() {
-    await player.pause();
-    setIsPlaying(false);
-  }
-
-  function togglePlayback() {
+  // Run the timer.
+  useEffect(() => {
+    let timeout;
     if (isPlaying) {
-      pauseMusic();
-    } else {
-      playMusic();
+      if (timeRemaining > 0) {
+        timeout = setTimeout(() => setTimeRemaining(timeRemaining - 1), 1000);
+      } else if (timeRemaining === 0) {
+        pauseMusic();
+      }
     }
-  }
+    return () => clearTimeout(timeout);
+  }, [timeRemaining, isPlaying, pauseMusic]);
 
+
+  // TODO: Handle case where user is not premium.
+  // TODO: Switch to server-side authentication.
   if (userData === null) {
     return (
       <div className="App">
@@ -154,13 +174,15 @@ function App() {
       </div>
     );
   } else {
+    const countdown = new Date(timeRemaining * 1000).toISOString().substr(11, 8);
     return (
       <div className="App">
         <h1>Welcome, {userData.display_name}!</h1>
         {selectedPlaylist && player && (
           <div>
             <h2>{selectedPlaylist.name}</h2>
-            <button onClick={togglePlayback}>{isPlaying ? 'Playing' : 'Play something'}</button>
+            <div className="countdown">{countdown}</div>
+            <button onClick={togglePlayback}>{isPlaying ? 'Pause Timer' : 'Start Timer'}</button>
           </div>
         )}
       </div>
