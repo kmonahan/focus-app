@@ -4,11 +4,9 @@ import './App.css';
 import Login from './components/Login/Login';
 import User from './components/User/User';
 import Button from './components/Button/Button';
+import Timer from './components/Timer/Timer';
 
 function App() {
-  // Constants
-  const DEFAULT_TIME = 1500;
-
   // State Hooks
   const [accessToken, setAccessToken] = useState(null);
   const [userData, setUserData] = useState(null);
@@ -17,7 +15,6 @@ function App() {
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [player, setPlayer] = useState(null);
   const [tracks, setTracks] = useState([]);
-  const [timeRemaining, setTimeRemaining] = useState(DEFAULT_TIME);
 
   // Callback Hooks
   const _api = useCallback(async (endpoint) => {
@@ -63,10 +60,7 @@ function App() {
 
   const pauseMusic = useCallback(async () => {
     await Promise.all([player.pause(), setIsPlaying(false)]);
-    if (timeRemaining <= 0) {
-      setTimeRemaining(DEFAULT_TIME);
-    }
-  }, [player, timeRemaining]);
+  }, [player]);
 
   function togglePlayback() {
     if (isPlaying) {
@@ -154,19 +148,6 @@ function App() {
     }
   }, [selectedPlaylist]);
 
-  // Run the timer.
-  useEffect(() => {
-    let timeout;
-    if (isPlaying) {
-      if (timeRemaining > 0) {
-        timeout = setTimeout(() => setTimeRemaining(timeRemaining - 1), 1000);
-      } else if (timeRemaining === 0) {
-        pauseMusic();
-      }
-    }
-    return () => clearTimeout(timeout);
-  }, [timeRemaining, isPlaying, pauseMusic]);
-
 
   // TODO: Handle case where user is not premium.
   // TODO: Switch to server-side authentication.
@@ -174,14 +155,13 @@ function App() {
   if (userData === null) {
     appContent = <Login/>;
   } else {
-    const countdown = new Date(timeRemaining * 1000).toISOString().substr(11, 8);
     appContent = (
       <div>
         <User displayName={userData.display_name} />
         {selectedPlaylist && player && (
           <div>
-            <h2>{selectedPlaylist.name}</h2>
-            <div className="countdown">{countdown}</div>
+            <h2>Now Playing: {selectedPlaylist.name}</h2>
+            <Timer isPlaying={isPlaying} pauseMusic={pauseMusic} />
             <Button isPlaying={isPlaying} onTogglePlayback={togglePlayback}/>
           </div>
         )}
