@@ -2,6 +2,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './App.css';
 import Login from './components/Login/Login';
+import User from './components/User/User';
+import Button from './components/Button/Button';
 
 function App() {
   // Constants
@@ -175,12 +177,12 @@ function App() {
     const countdown = new Date(timeRemaining * 1000).toISOString().substr(11, 8);
     appContent = (
       <div>
-        <h2>Welcome, {userData.display_name}!</h2>
+        <User displayName={userData.display_name} />
         {selectedPlaylist && player && (
           <div>
             <h2>{selectedPlaylist.name}</h2>
             <div className="countdown">{countdown}</div>
-            <button onClick={togglePlayback}>{isPlaying ? 'Pause Timer' : 'Start Timer'}</button>
+            <Button isPlaying={isPlaying} onTogglePlayback={togglePlayback}/>
           </div>
         )}
       </div>

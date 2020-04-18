@@ -1,0 +1,29 @@
+.button {
+  border: 0;
+  border-radius: 0.4em;
+  color: black;
+  cursor: pointer;
+  display: inline-block;
+  font-size: 1.5em;
+  margin-top: 1em;
+  padding: 0.5em;
+  text-decoration: none;
+}
+
+.button--paused {
+  background-color: palegreen;
+}
+
+.button--paused:hover,
+.button--paused:focus {
+  background-color: seagreen;
+}
+
+.button--playing {
+  background-color: palevioletred;
+}
+
+.button--playing:hover,
+.button--playing:focus {
+  background-color: mediumvioletred;
+}
