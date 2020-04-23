@@ -1,13 +1,16 @@
 /* globals Spotify */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
+import Cookie from 'js-cookie';
 import './App.css';
 import Login from './components/Login/Login';
 import User from './components/User/User';
 import Button from './components/Button/Button';
 import Timer from './components/Timer/Timer';
+import randomState from './utilities/randomState';
 
 function App() {
   // State Hooks
+  const [stateToken, setStateToken] = useState(null);
   const [accessToken, setAccessToken] = useState(null);
   const [userData, setUserData] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -70,24 +73,43 @@ function App() {
     }
   }
   // Effect Hooks
+  // Generate a state token to use in the Spotify Auth request.
+  useEffect(() => {
+    const tokenCookie = Cookie.get('stateToken');
+    if (tokenCookie) {
+      setStateToken(tokenCookie);
+    } else {
+      const token = randomState();
+      Cookie.set('stateToken', token);
+      setStateToken(token);
+    }
+  }, [stateToken]);
+
   // Set access token if returned from Spotify.
-  // TODO: Handle case when access token expires.
   useEffect(() => {
     const hash = window.location.hash;
-    if (hash) {
+    if (stateToken && hash) {
       const hashParams = new URLSearchParams(`?${hash.substr(1)}`);
       if (hashParams.has('access_token')) {
         const accessToken = hashParams.get('access_token');
-        setAccessToken(accessToken);
+        const returnedState = hashParams.get('state');
+        if (returnedState === stateToken) {
+          setAccessToken(accessToken);
+        }
       }
     }
-  }, []);
+  }, [stateToken]);
 
   // Fetch user account data from Spotify.
   useEffect(() => {
     async function fetchUserData() {
-      const userData = await _api('me');
-      setUserData(userData)
+      try {
+        const userData = await _api('me');
+        setUserData(userData);
+      } catch (err) {
+        console.error(err);
+        setAccessToken(null);
+      }
     }
 
     if (accessToken) {
@@ -96,10 +118,16 @@ function App() {
   }, [_api, accessToken]);
 
   // Fetch available playlists from Spotify.
+  // TODO: Allow user to choose from their own playlists.
   useEffect(() => {
     async function fetchPlaylistData() {
-      const playlistData = await _api('browse/categories/focus/playlists');
-      setPlaylists(playlistData.playlists.items);
+      try {
+        const playlistData = await _api('browse/categories/focus/playlists');
+        setPlaylists(playlistData.playlists.items);
+      } catch (err) {
+        console.error(err);
+        setAccessToken(null);
+      }
     }
 
     if (accessToken) {
@@ -110,8 +138,13 @@ function App() {
   // Randomly select a playlist.
   useEffect(() => {
     async function fetchPlaylistData(playlist) {
-      const playlistData = await _api(`playlists/${playlist.id}`);
-      setSelectedPlaylist(playlistData);
+      try {
+        const playlistData = await _api(`playlists/${playlist.id}`);
+        setSelectedPlaylist(playlistData);
+      } catch (err) {
+        console.error(err);
+        setAccessToken(null);
+      }
     }
 
     if (playlists.length) {
@@ -150,10 +183,10 @@ function App() {
 
 
   // TODO: Handle case where user is not premium.
-  // TODO: Switch to server-side authentication.
+  // TODO: Switch to server-side authentication w/Netlify.
   let appContent;
   if (userData === null) {
-    appContent = <Login/>;
+    appContent = <Login state={stateToken}/>;
   } else {
     appContent = (
       <div>
