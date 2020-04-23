@@ -1,0 +1,7 @@
+.error {
+  background-color: lightcoral;
+  border-radius: 0.4em;
+  margin: 0 auto;
+  max-width: 31.25rem;
+  padding: 1em;
+}

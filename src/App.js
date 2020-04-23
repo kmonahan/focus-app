@@ -2,10 +2,12 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import Cookie from 'js-cookie';
 import './App.css';
-import Login from './components/Login/Login';
-import User from './components/User/User';
 import Button from './components/Button/Button';
+import Error from './components/Error/Error';
+import Login from './components/Login/Login';
 import Timer from './components/Timer/Timer';
+import User from './components/User/User';
+
 import randomState from './utilities/randomState';
 
 function App() {
@@ -18,6 +20,7 @@ function App() {
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [player, setPlayer] = useState(null);
   const [tracks, setTracks] = useState([]);
+  const [errorMessage, setErrorMessage] = useState('');
 
   // Callback Hooks
   const _api = useCallback(async (endpoint) => {
@@ -28,6 +31,16 @@ function App() {
     });
     return response.json();
   }, [accessToken]);
+
+  const pauseMusic = useCallback(async () => {
+    await Promise.all([player.pause(), setIsPlaying(false)]);
+  }, [player]);
+
+  const _handleError = useCallback(err => {
+    console.error(err);
+    setErrorMessage(err);
+    setAccessToken(null);
+  });
 
   async function play({id, tracksToPlay = []}) {
     const params = {
@@ -61,10 +74,6 @@ function App() {
     setIsPlaying(true);
   }
 
-  const pauseMusic = useCallback(async () => {
-    await Promise.all([player.pause(), setIsPlaying(false)]);
-  }, [player]);
-
   function togglePlayback() {
     if (isPlaying) {
       pauseMusic();
@@ -95,6 +104,8 @@ function App() {
         const returnedState = hashParams.get('state');
         if (returnedState === stateToken) {
           setAccessToken(accessToken);
+        } else {
+          setErrorMessage('Invalid response state value.');
         }
       }
     }
@@ -107,15 +118,14 @@ function App() {
         const userData = await _api('me');
         setUserData(userData);
       } catch (err) {
-        console.error(err);
-        setAccessToken(null);
+        _handleError(err)
       }
     }
 
     if (accessToken) {
       fetchUserData();
     }
-  }, [_api, accessToken]);
+  }, [_api, accessToken, _handleError]);
 
   // Fetch available playlists from Spotify.
   // TODO: Allow user to choose from their own playlists.
@@ -125,15 +135,14 @@ function App() {
         const playlistData = await _api('browse/categories/focus/playlists');
         setPlaylists(playlistData.playlists.items);
       } catch (err) {
-        console.error(err);
-        setAccessToken(null);
+        _handleError(err);
       }
     }
 
     if (accessToken) {
       fetchPlaylistData();
     }
-  }, [_api, accessToken]);
+  }, [_api, accessToken, _handleError]);
 
   // Randomly select a playlist.
   useEffect(() => {
@@ -142,8 +151,7 @@ function App() {
         const playlistData = await _api(`playlists/${playlist.id}`);
         setSelectedPlaylist(playlistData);
       } catch (err) {
-        console.error(err);
-        setAccessToken(null);
+        _handleError(err);
       }
     }
 
@@ -153,7 +161,7 @@ function App() {
       const selectedPlaylist = playlists[randomSelection];
       fetchPlaylistData(selectedPlaylist);
     }
-  }, [playlists, _api]);
+  }, [playlists, _api, _handleError]);
 
   // Create the Spotify Player.
   useEffect(() => {
@@ -183,7 +191,6 @@ function App() {
 
 
   // TODO: Handle case where user is not premium.
-  // TODO: Switch to server-side authentication w/Netlify.
   let appContent;
   if (userData === null) {
     appContent = <Login state={stateToken}/>;
@@ -204,6 +211,9 @@ function App() {
   return (
     <div className="App">
       <h1>Focus</h1>
+      {errorMessage && (
+        <Error message={errorMessage}/>
+      )}
       {appContent}
     </div>
   );
