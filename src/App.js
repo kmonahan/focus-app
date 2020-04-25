@@ -10,7 +10,6 @@ import User from './components/User/User';
 
 import randomState from './utilities/randomState';
 
-// TODO: Fix issue where way too many requests fired, resulting in 429
 function App() {
   // State Hooks
   const [stateToken, setStateToken] = useState(null);
@@ -18,14 +17,18 @@ function App() {
   const [userData, setUserData] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playlists, setPlaylists] = useState([]);
-  const [selectedPlaylist, setSelectedPlaylist] = useState(null);
+  const [playlistData, setPlaylistData] = useState(null);
   const [player, setPlayer] = useState(null);
   const [tracks, setTracks] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
 
   // Callback Hooks
   const _api = useCallback(async (endpoint) => {
-    const response = await fetch(`https://api.spotify.com/v1/${endpoint}`, {
+    let url = endpoint;
+    if (endpoint.indexOf('http') !== 0) {
+      url = `https://api.spotify.com/v1/${endpoint}`;
+    }
+    const response = await fetch(url, {
       headers: {
         'Authorization': `Bearer ${accessToken}`
       }
@@ -43,12 +46,44 @@ function App() {
     setAccessToken(null);
   }, []);
 
-  const fetchMoreTracks = useCallback(() => {
-    // Are there more pages in the playlist?
-    if (selectedPlaylist && selectedPlaylist.tracks.next) {
-
+  const randomlyChoosePlaylist = useCallback(() => {
+    if (playlists.length) {
+      const max = playlists.length - 1;
+      const randomSelection = Math.floor(Math.random() * (max + 1));
+      return playlists[randomSelection];
     }
-  }, [selectedPlaylist]);
+    return null;
+  }, [playlists]);
+
+  const fetchPlaylistData = useCallback(async playlist => {
+    try {
+      const playlistData = await _api(`playlists/${playlist.id}`);
+      setPlaylistData(playlistData);
+    } catch (err) {
+      _handleError(err);
+    }
+  }, [_api, _handleError]);
+
+  const getNewPlaylist = useCallback(() => {
+    const randomPlaylist = randomlyChoosePlaylist();
+    if (randomPlaylist) {
+      fetchPlaylistData(randomPlaylist);
+    }
+  }, [randomlyChoosePlaylist, fetchPlaylistData]);
+
+  const fetchMoreTracks = useCallback(async () => {
+    // Are there more pages in the playlist?
+    if (playlistData && playlistData.tracks.next) {
+      try {
+        const nextPage = await _api(playlistData.tracks.next);
+        setPlaylistData(nextPage);
+      } catch (err) {
+        _handleError(err);
+      }
+    } else {
+      getNewPlaylist();
+    }
+  }, [playlistData, _api, _handleError, getNewPlaylist]);
 
   const onPlaybackStateChange = useCallback(({track_window}) => {
     if (!track_window.next_tracks.length) {
@@ -72,8 +107,7 @@ function App() {
     return fetch(`https://api.spotify.com/v1/me/player/play?device_id=${id}`, params);
   }
 
-  // TODO: Play next page of tracks when first is finished.
-  // TODO: Randomly choose another playlist after first finishes.
+  // TODO: Refactor to rely less on a chain of event hooks.
   // TODO: Update timer if user pauses music via another device.
   // TODO: Check if user's token is going to expire midway through the next pomodoro and go ahead and refresh it if necessary.
   async function playMusic() {
@@ -163,24 +197,11 @@ function App() {
     }
   }, [_api, accessToken, _handleError]);
 
-  // Randomly select a playlist.
   useEffect(() => {
-    async function fetchPlaylistData(playlist) {
-      try {
-        const playlistData = await _api(`playlists/${playlist.id}`);
-        setSelectedPlaylist(playlistData);
-      } catch (err) {
-        _handleError(err);
-      }
+    if (!playlistData) {
+      getNewPlaylist();
     }
-
-    if (playlists.length) {
-      const max = playlists.length - 1;
-      const randomSelection = Math.floor(Math.random() * (max + 1));
-      const selectedPlaylist = playlists[randomSelection];
-      fetchPlaylistData(selectedPlaylist);
-    }
-  }, [playlists, _api, _handleError]);
+  }, [getNewPlaylist, playlists, playlistData]);
 
   // Create the Spotify Player.
   useEffect(() => {
@@ -204,11 +225,11 @@ function App() {
 
   // Gather up the next set of tracks to play.
   useEffect(() => {
-    if (selectedPlaylist) {
-      const tracks = selectedPlaylist.tracks.items.map(item => item.track.uri);
+    if (playlistData) {
+      const tracks = playlistData.tracks.items.map(item => item.track.uri);
       setTracks(tracks);
     }
-  }, [selectedPlaylist]);
+  }, [playlistData]);
 
 
   // TODO: Handle case where user is not premium.
@@ -219,9 +240,9 @@ function App() {
     appContent = (
       <div>
         <User displayName={userData.display_name} />
-        {selectedPlaylist && player && (
+        {playlistData && player && (
           <div>
-            <h2>Now Playing: {selectedPlaylist.name}</h2>
+            <h2>Now Playing: {playlistData.name}</h2>
             <Timer isPlaying={isPlaying} pauseMusic={pauseMusic} />
             <Button isPlaying={isPlaying} onTogglePlayback={togglePlayback}/>
           </div>
