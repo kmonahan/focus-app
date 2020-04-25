@@ -10,6 +10,7 @@ import User from './components/User/User';
 
 import randomState from './utilities/randomState';
 
+// TODO: Fix issue where way too many requests fired, resulting in 429
 function App() {
   // State Hooks
   const [stateToken, setStateToken] = useState(null);
@@ -40,7 +41,22 @@ function App() {
     console.error(err);
     setErrorMessage(err);
     setAccessToken(null);
-  });
+  }, []);
+
+  const fetchMoreTracks = useCallback(() => {
+    // Are there more pages in the playlist?
+    if (selectedPlaylist && selectedPlaylist.tracks.next) {
+
+    }
+  }, [selectedPlaylist]);
+
+  const onPlaybackStateChange = useCallback(({track_window}) => {
+    if (!track_window.next_tracks.length) {
+      // Fetch more tracks.
+      fetchMoreTracks();
+    }
+    console.log('track window', track_window);
+  }, [fetchMoreTracks]);
 
   async function play({id, tracksToPlay = []}) {
     const params = {
@@ -59,6 +75,7 @@ function App() {
   // TODO: Play next page of tracks when first is finished.
   // TODO: Randomly choose another playlist after first finishes.
   // TODO: Update timer if user pauses music via another device.
+  // TODO: Check if user's token is going to expire midway through the next pomodoro and go ahead and refresh it if necessary.
   async function playMusic() {
     const currentState = await player.getCurrentState();
     if (currentState && currentState.paused) {
@@ -81,6 +98,7 @@ function App() {
       playMusic();
     }
   }
+
   // Effect Hooks
   // Generate a state token to use in the Spotify Auth request.
   useEffect(() => {
@@ -109,6 +127,7 @@ function App() {
         }
       }
     }
+    return () => setErrorMessage('');
   }, [stateToken]);
 
   // Fetch user account data from Spotify.
@@ -165,21 +184,23 @@ function App() {
 
   // Create the Spotify Player.
   useEffect(() => {
-    async function createPlayer() {
-      const player = new Spotify.Player({
-        name: 'Web Playback SDK Quick Start Player',
-        getOAuthToken: cb => cb(accessToken)
-      });
-      const connection = await player.connect();
-      if (connection) {
-        player.addListener('ready', () => setPlayer(player));
+    const player = new Spotify.Player({
+      name: 'Web Playback SDK Quick Start Player',
+      getOAuthToken: cb => cb(accessToken)
+    });
+    player.addListener('ready', function onReady() {
+      setPlayer(player);
+      player.removeListener('ready', onReady);
+    });
+    player.addListener('player_state_changed', onPlaybackStateChange);
+    player.connect();
+
+    return () => {
+      if (typeof player === 'object') {
+        player.removeListener('player_state_changed', onPlaybackStateChange);
       }
     }
-
-    if (accessToken) {
-      createPlayer();
-    }
-  }, [accessToken]);
+  }, [accessToken, onPlaybackStateChange]);
 
   // Gather up the next set of tracks to play.
   useEffect(() => {
