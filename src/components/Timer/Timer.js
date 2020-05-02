@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import './Timer.css';
 
-function Timer({isPlaying, pauseMusic}) {
+function Timer({isPlaying, pauseMusic, onFinish}) {
   // Constants
   const DEFAULT_TIME = 1500;
   const [timeRemaining, setTimeRemaining] = useState(DEFAULT_TIME);
@@ -23,8 +23,9 @@ function Timer({isPlaying, pauseMusic}) {
   useEffect(() => {
     if (!isPlaying && timeRemaining <= 0) {
       setTimeRemaining(DEFAULT_TIME);
+      onFinish();
     }
-  }, [isPlaying, timeRemaining]);
+  }, [isPlaying, timeRemaining, onFinish]);
 
   const countdown = new Date(timeRemaining * 1000).toISOString().substr(11, 8);
   return (

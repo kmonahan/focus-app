@@ -9,6 +9,7 @@ import Timer from './components/Timer/Timer';
 import User from './components/User/User';
 
 import randomState from './utilities/randomState';
+import ProgressMeter from './components/ProgressMeter/ProgressMeter';
 
 function App() {
   // State Hooks
@@ -16,13 +17,22 @@ function App() {
   const [accessToken, setAccessToken] = useState(null);
   const [userData, setUserData] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isReset, setIsReset] = useState(false);
   const [playlists, setPlaylists] = useState([]);
   const [playlistData, setPlaylistData] = useState(null);
   const [player, setPlayer] = useState(null);
   const [tracks, setTracks] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
+  const [pomodoroCount, setPomodoroCount] = useState(0);
 
   // Callback Hooks
+  const _handleError = useCallback(err => {
+    console.error(err);
+    setErrorMessage(err);
+    setAccessToken(null);
+  }, []);
+
+
   const _api = useCallback(async (endpoint) => {
     let url = endpoint;
     if (endpoint.indexOf('http') !== 0) {
@@ -40,20 +50,14 @@ function App() {
     await Promise.all([player.pause(), setIsPlaying(false)]);
   }, [player]);
 
-  const _handleError = useCallback(err => {
-    console.error(err);
-    setErrorMessage(err);
-    setAccessToken(null);
-  }, []);
-
-  const randomlyChoosePlaylist = useCallback(() => {
-    if (playlists.length) {
-      const max = playlists.length - 1;
+  const randomlyChoosePlaylist = useCallback((playlistSet) => {
+    if (playlistSet.length) {
+      const max = playlistSet.length - 1;
       const randomSelection = Math.floor(Math.random() * (max + 1));
-      return playlists[randomSelection];
+      return playlistSet[randomSelection];
     }
     return null;
-  }, [playlists]);
+  }, []);
 
   const fetchPlaylistData = useCallback(async playlist => {
     try {
@@ -64,8 +68,8 @@ function App() {
     }
   }, [_api, _handleError]);
 
-  const getNewPlaylist = useCallback(() => {
-    const randomPlaylist = randomlyChoosePlaylist();
+  const getNewPlaylist = useCallback((playlistSet) => {
+    const randomPlaylist = randomlyChoosePlaylist(playlistSet);
     if (randomPlaylist) {
       fetchPlaylistData(randomPlaylist);
     }
@@ -81,9 +85,9 @@ function App() {
         _handleError(err);
       }
     } else {
-      getNewPlaylist();
+      getNewPlaylist(playlists);
     }
-  }, [playlistData, _api, _handleError, getNewPlaylist]);
+  }, [playlistData, _api, _handleError, getNewPlaylist, playlists]);
 
   const onPlaybackStateChange = useCallback(({track_window}) => {
     if (!track_window.next_tracks.length) {
@@ -107,9 +111,13 @@ function App() {
     return fetch(`https://api.spotify.com/v1/me/player/play?device_id=${id}`, params);
   }
 
-  // TODO: Refactor to rely less on a chain of event hooks.
-  // TODO: Update timer if user pauses music via another device.
+  function finishPomodoro() {
+    setIsReset(true);
+    setPomodoroCount(pomodoroCount + 1);
+  }
+
   // TODO: Check if user's token is going to expire midway through the next pomodoro and go ahead and refresh it if necessary.
+  // TODO: Store pomodoros in cookie so they're not lost on refresh
   async function playMusic() {
     const currentState = await player.getCurrentState();
     if (currentState && currentState.paused) {
@@ -122,6 +130,7 @@ function App() {
         tracksToPlay: tracks,
       });
     }
+    setIsReset(false);
     setIsPlaying(true);
   }
 
@@ -144,9 +153,11 @@ function App() {
       Cookie.set('stateToken', token);
       setStateToken(token);
     }
-  }, [stateToken]);
+  }, []);
 
   // Set access token if returned from Spotify.
+  // Depends on state token. If the state token changes,
+  // we should reauthenticate.
   useEffect(() => {
     const hash = window.location.hash;
     if (stateToken && hash) {
@@ -157,14 +168,16 @@ function App() {
         if (returnedState === stateToken) {
           setAccessToken(accessToken);
         } else {
-          setErrorMessage('Invalid response state value.');
+          _handleError('Invalid state token value. You must reauthenticate.');
         }
       }
     }
     return () => setErrorMessage('');
-  }, [stateToken]);
+  }, [stateToken, _handleError]);
 
   // Fetch user account data from Spotify.
+  // Depends on access token. If that changes,
+  // we'll need to requery the user data.
   useEffect(() => {
     async function fetchUserData() {
       try {
@@ -180,48 +193,48 @@ function App() {
     }
   }, [_api, accessToken, _handleError]);
 
+  // Create the Spotify Player.
+  useEffect(() => {
+    if (accessToken) {
+      const player = new Spotify.Player({
+        name: 'Web Playback SDK Quick Start Player',
+        getOAuthToken: cb => cb(accessToken)
+      });
+      player.addListener('ready', function onReady() {
+        setPlayer(player);
+        player.removeListener('ready', onReady);
+      });
+      player.addListener('player_state_changed', onPlaybackStateChange);
+      player.connect();
+
+      return () => {
+        if (typeof player === 'object') {
+          player.removeListener('player_state_changed', onPlaybackStateChange);
+        }
+      }
+    }
+  }, [accessToken, onPlaybackStateChange]);
+
   // Fetch available playlists from Spotify.
-  // TODO: Allow user to choose from their own playlists.
+  // Depends on the access token, but we only
+  // need to refetch playlists if we don't currently
+  // have any.
   useEffect(() => {
     async function fetchPlaylistData() {
       try {
         const playlistData = await _api('browse/categories/focus/playlists');
-        setPlaylists(playlistData.playlists.items);
+        const playlistSet = playlistData.playlists.items;
+        setPlaylists(playlistSet);
+        getNewPlaylist(playlistSet);
       } catch (err) {
         _handleError(err);
       }
     }
 
-    if (accessToken) {
+    if (accessToken && !playlists.length) {
       fetchPlaylistData();
     }
-  }, [_api, accessToken, _handleError]);
-
-  useEffect(() => {
-    if (!playlistData) {
-      getNewPlaylist();
-    }
-  }, [getNewPlaylist, playlists, playlistData]);
-
-  // Create the Spotify Player.
-  useEffect(() => {
-    const player = new Spotify.Player({
-      name: 'Web Playback SDK Quick Start Player',
-      getOAuthToken: cb => cb(accessToken)
-    });
-    player.addListener('ready', function onReady() {
-      setPlayer(player);
-      player.removeListener('ready', onReady);
-    });
-    player.addListener('player_state_changed', onPlaybackStateChange);
-    player.connect();
-
-    return () => {
-      if (typeof player === 'object') {
-        player.removeListener('player_state_changed', onPlaybackStateChange);
-      }
-    }
-  }, [accessToken, onPlaybackStateChange]);
+  }, [_api, accessToken, _handleError, playlists, getNewPlaylist]);
 
   // Gather up the next set of tracks to play.
   useEffect(() => {
@@ -243,8 +256,9 @@ function App() {
         {playlistData && player && (
           <div>
             <h2>Now Playing: {playlistData.name}</h2>
-            <Timer isPlaying={isPlaying} pauseMusic={pauseMusic} />
+            <Timer isPlaying={isPlaying} pauseMusic={pauseMusic} onFinish={finishPomodoro}/>
             <Button isPlaying={isPlaying} onTogglePlayback={togglePlayback}/>
+            <ProgressMeter pomodoroCount={pomodoroCount} isReset={isReset} />
           </div>
         )}
       </div>

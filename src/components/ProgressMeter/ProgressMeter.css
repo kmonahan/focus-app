@@ -1,0 +1,12 @@
+.progress-meter {
+  font-size: 1em;
+  margin-top: 2rem;
+}
+
+.progress-meter__message {
+  font-size: 1.25em;
+}
+
+.progress-meter__meter {
+  font-size: 1.5em;
+}
