@@ -155,6 +155,14 @@ function App() {
     }
   }, []);
 
+  // Load any existing pomodoros from a cookie.
+  useEffect(() => {
+    const countCookie = Cookie.get('pomodoroCount');
+    if (countCookie) {
+      setPomodoroCount(parseInt(countCookie));
+    }
+  }, []);
+
   // Set access token if returned from Spotify.
   // Depends on state token. If the state token changes,
   // we should reauthenticate.
@@ -244,6 +252,10 @@ function App() {
     }
   }, [playlistData]);
 
+  // Update the pomodoro count cookie as pomodoros are completed.
+  useEffect(() => {
+    Cookie.set('pomodoroCount', pomodoroCount);
+  }, [pomodoroCount]);
 
   // TODO: Handle case where user is not premium.
   let appContent;
